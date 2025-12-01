@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电磁场题库答题系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            display: flex;
+            min-height: 100vh;
+            background-color: #f5f7fa;
+        }
+        /* 侧边栏知识点树 */
+        .sidebar {
+            width: 300px;
+            background-color: #fff;
+            border-right: 1px solid #e6e9ed;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .sidebar h2 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e6e9ed;
+        }
+        .tree-node {
+            margin-left: 15px;
+            position: relative;
+        }
+        .tree-node > div {
+            padding: 5px 0;
+            cursor: pointer;
+        }
+        .tree-root {
+            margin-left: 0;
+        }
+        .tree-node .title {
+            display: flex;
+            align-items: center;
+        }
+        .tree-node .title::before {
+            content: "⊞";
+            margin-right: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+        .tree-node.collapsed .title::before {
+            content: "⊟";
+        }
+        .tree-node .children {
+            display: none;
+        }
+        .tree-node.expanded .children {
+            display: block;
+        }
+        .error-point {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .error-point::after {
+            content: "（错题）";
+            font-size: 12px;
+            margin-left: 5px;
+        }
+
+        /* 主答题区域 */
+        .main {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .score-display {
+            font-size: 20px;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .question-container {
+            width: 80%;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+        .question {
+            margin-bottom: 25px;
+        }
+        .question h3 {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .option {
+            margin: 8px 0;
+            padding-left: 5px;
+        }
+        .option input {
+            margin-right: 8px;
+        }
+        .short-answer {
+            width: 100%;
+            height: 100px;
+            border: 1px solid #e6e9ed;
+            border-radius: 4px;
+            padding: 10px;
+            resize: vertical;
+            margin-top: 10px;
+        }
+        .btn-group {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #3498db;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .answer-analysis {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            display: none;
+        }
+        .answer-analysis h4 {
+            color: #27ae60;
+            margin-bottom: 10px;
+        }
+        .analysis-content {
+            color: #555;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <!-- 侧边栏：知识点树形结构 -->
+    <div class="sidebar">
+        <h2>电磁场知识点树</h2>
+        <div id="knowledge-tree"></div>
+    </div>
+
+    <!-- 主答题区域 -->
+    <div class="main">
+        <div class="score-display">当前分数：<span id="score">0</span>/100</div>
+        <div class="question-container" id="question-box">
+            <!-- 题目将通过JS动态生成 -->
+        </div>
+        <div class="btn-group">
+            <button id="submit-btn">提交答案</button>
+            <button id="redo-error-btn" style="display: none;">做错题知识点相关题</button>
+            <button id="redo-random-btn" style="display: none;">重新随机答题</button>
+        </div>
+    </div>
+
+    <script>
+        // ************************** 第一步：题库结构化与知识点映射 **************************
+        // 知识点树形结构数据
+        const knowledgeTreeData = {
+            title: "电磁场理论",
+            children: [
+                {
+                    title: "矢量场基础",
+                    children: [
+                        { title: "散度与旋度", id: "vector-divergence-curl" },
+                        { title: "梯度", id: "vector-gradient" },
+                        { title: "矢量场的源", id: "vector-source" },
+                        { title: "坐标系（圆柱/球坐标）", id: "coordinate-system" }
+                    ]
+                },
+                {
+                    title: "静电场",
+                    children: [
+                        { title: "电场强度", id: "electrostatic-e" },
+                        { title: "静电平衡", id: "electrostatic-equilibrium" },
+                        { title: "电介质极化", id: "dielectric-polarization" },
+                        { title: "静电场基本方程", id: "electrostatic-equation" },
+                        { title: "电容器", id: "capacitor" }
+                    ]
+                },
+                {
+                    title: "恒定磁场",
+                    children: [
+                        { title: "磁感应强度与磁场强度", id: "magnetic-b-h" },
+                        { title: "磁介质磁化", id: "magnetic-magnetization" },
+                        { title: "恒定磁场基本方程", id: "magnetic-equation" },
+                        { title: "磁场边界条件", id: "magnetic-boundary" }
+                    ]
+                },
+                {
+                    title: "时变电磁场",
+                    children: [
+                        { title: "麦克斯韦方程组", id: "maxwell-equation" },
+                        { title: "位移电流", id: "displacement-current" },
+                        { title: "电磁感应定律", id: "electromagnetic-induction" },
+                        { title: "坡印亭定理", id: "poynting-theorem" }
+                    ]
+                },
+                {
+                    title: "电磁波传播",
+                    children: [
+                        { title: "均匀平面波", id: "plane-wave" },
+                        { title: "导电媒质中的传播", id: "wave-conductive" },
+                        { title: "色散与群速/相速", id: "wave-dispersion" },
+                        { title: "电磁波极化", id: "wave-polarization" },
+                        { title: "反射与全反射", id: "wave-reflection" }
+                    ]
+                },
+                {
+                    title: "导波系统",
+                    children: [
+                        { title: "波导类型（矩形/圆柱/同轴）", id: "waveguide-type" },
+                        { title: "TEM/TE/TM波", id: "waveguide-mode" },
+                        { title: "谐振腔", id: "resonator" },
+                        { title: "光纤", id: "optical-fiber" }
+                    ]
+                },
+                {
+                    title: "电磁能量与损耗",
+                    children: [
+                        { title: "电磁场能量密度", id: "em-energy" },
+                        { title: "电磁波衰减", id: "wave-attenuation" }
+                    ]
+                }
+            ]
+        };
+
+        // 题库数据（含题干、选项、答案、知识点ID、解析）
+        const questionBank = {
+            // 单选题
+            single: [
+                {
+                    id: "s1",
+                    title: "理论证明，在不同电介质交界面上，电场强度的（　 ）。",
+                    options: [
+                        "法向分量和切向分量均连续",
+                        "法向分量连续",
+                        "切向分量连续",
+                        "法向分量与切向分量均不连续"
+                    ],
+                    answer: "C",
+                    knowledge: ["electrostatic-equation"],
+                    analysis: "电介质分界面上，电场强度的切向分量连续，电位移矢量的法向分量连续。"
+                },
+                {
+                    id: "s2",
+                    title: "电磁场可以用矢势和标势来表示的理由是（  ）",
+                    options: ["", "", "", ""],
+                    answer: "B",
+                    knowledge: ["maxwell-equation", "magnetic-b-h"],
+                    analysis: "磁场的无散性（∇·B=0）使得磁感应强度可表示为矢量势的旋度，电场则可通过标势与矢量势结合表示。"
+                },
+                {
+                    id: "s3",
+                    title: "如果一个矢量场的散度处处为零，则这个矢量场是由（       ）源所产生的",
+                    options: ["散度", "旋度", "梯度", "矢量"],
+                    answer: "B",
+                    knowledge: ["vector-source"],
+                    analysis: "散度为零的矢量场是无散场，由旋度源（涡旋源）产生；旋度为零的矢量场由散度源产生。"
+                },
+                {
+                    id: "s4",
+                    title: "导体在静电平衡下，其内部电场强度(    )",
+                    options: ["为零", "为非零常数", "随位置不同而不同", "不确定"],
+                    answer: "A",
+                    knowledge: ["electrostatic-equilibrium"],
+                    analysis: "静电平衡时，导体内部自由电荷不再移动，内部电场强度为零。"
+                },
+                {
+                    id: "s5",
+                    title: "磁介质中的（        ）的积分形式是：∮H·dl=∑I",
+                    options: ["散度定理", "高斯定理", "电磁感应定律", "安培环路定律"],
+                    answer: "D",
+                    knowledge: ["magnetic-equation"],
+                    analysis: "安培环路定律的积分形式为磁场强度沿闭合路径的线积分等于路径包围的传导电流代数和。"
+                },
+                {
+                    id: "s6",
+                    title: "与自由空间相比，在导电媒质中电磁波的波长___，相速___  （  ）",
+                    options: ["变短；减小", "变长；减慢", "不变；不变", "变长；不变"],
+                    answer: "A",
+                    knowledge: ["wave-conductive"],
+                    analysis: "导电媒质中电磁波存在衰减，且相速随频率变化，波长λ=v/f，相速减小则波长变短。"
+                },
+                {
+                    id: "s7",
+                    title: "以下关于时变电磁场的叙述中，不正确的是（      ）",
+                    options: [
+                        "电场是有旋场",
+                        "电场和磁场相互激发",
+                        "电荷可以激发电场",
+                        "磁场是有散场"
+                    ],
+                    answer: "D",
+                    knowledge: ["maxwell-equation"],
+                    analysis: "时变电磁场中，磁场的散度始终为零（∇·B=0），是无散场；电场是有旋有散场。"
+                },
+                {
+                    id: "s8",
+                    title: "关于位移电流下列说法正确的是（  ）",
+                    options: [
+                        "位移电流是线性变化的磁场产生的。",
+                        "位移电流是变化的电场产生的。",
+                        "位移电流是由自由电荷的运动产生的。",
+                        "位移电流是实质的电场。"
+                    ],
+                    answer: "B",
+                    knowledge: ["displacement-current"],
+                    analysis: "位移电流是电位移矢量的时间变化率，本质是变化的电场，并非真实电荷的运动。"
+                },
+                {
+                    id: "s9",
+                    title: "利用磁场的无散度特性，恒定磁场的磁感应强度可以用一个（          ）来表示。",
+                    options: [
+                        "标量函数的梯度",
+                        "矢量函数的散度",
+                        "矢量函数的旋度",
+                        "标量函数的负梯度"
+                    ],
+                    answer: "C",
+                    knowledge: ["magnetic-b-h"],
+                    analysis: "由∇·B=0，根据矢量恒等式，磁感应强度B可表示为矢量磁位A的旋度，即B=∇×A。"
+                },
+                {
+                    id: "s10",
+                    title: "恒定磁场中不同磁媒质分界上的边界条件为（）。",
+                    options: ["H1t=H2t", "B1t=B2t", "B1n=B2n", "H1n=H2n"],
+                    answer: "C",
+                    knowledge: ["magnetic-boundary"],
+                    analysis: "磁媒质分界面上，磁感应强度的法向分量连续，磁场强度的切向分量在无面电流时连续。"
+                },
+                {
+                    id: "s11",
+                    title: "静电场中，电场强度的方向与正试验电荷的受力方向(    )。",
+                    options: ["相同或一致", "相反", "正交", "不能确定"],
+                    answer: "A",
+                    knowledge: ["electrostatic-e"],
+                    analysis: "电场强度的定义为E=F/q（q为正试验电荷），因此E的方向与正试验电荷受力方向一致。"
+                },
+                {
+                    id: "s12",
+                    title: "（   ）在外（    ）作用下发生极化。",
+                    options: [
+                        "电介质，电场",
+                        "电介质，磁场",
+                        "磁介质，磁场",
+                        "磁介质，电场"
+                    ],
+                    answer: "A",
+                    knowledge: ["dielectric-polarization"],
+                    analysis: "电介质在外部电场作用下，内部电荷发生微观位移，形成电偶极矩，即极化现象。"
+                },
+                {
+                    id: "s13",
+                    title: "磁场强度在穿过存在面电流的分界面时，其（     ）是不连续的。",
+                    options: ["法向分量", "切向分量", "x分量", "y分量"],
+                    answer: "B",
+                    knowledge: ["magnetic-boundary"],
+                    analysis: "存在面电流时，磁场强度的切向分量满足H1t - H2t = Js（面电流密度），因此切向分量不连续。"
+                },
+                {
+                    id: "s14",
+                    title: "群速（       ）相速时，电磁波传播会出现正常色散现象。",
+                    options: ["大于", "远远大于", "小于", "等于"],
+                    answer: "C",
+                    knowledge: ["wave-dispersion"],
+                    analysis: "正常色散中，频率越高相速越大，群速小于相速；反常色散中群速大于相速。"
+                },
+                {
+                    id: "s15",
+                    title: "在同一种（     ）中，不同的频率的电磁波的相速是不同的。因此，相应媒质称为色散媒质。",
+                    options: ["导电媒质", "理想介质", "理想导体", "绝缘材料"],
+                    answer: "A",
+                    knowledge: ["wave-dispersion"],
+                    analysis: "导电媒质属于色散媒质，相速随频率变化；理想介质中相速仅与媒质参数有关，无色散。"
+                },
+                {
+                    id: "s16",
+                    title: "D=εE、B=μH、J=σE称为线性和各向同性媒质的（      ）。",
+                    options: ["共性关系", "本构关系", "边界关系", "本体关系"],
+                    answer: "B",
+                    knowledge: ["maxwell-equation"],
+                    analysis: "本构关系描述了媒质中电位移矢量、磁感应强度与电场强度、磁场强度的关系，是麦克斯韦方程组的补充。"
+                },
+                {
+                    id: "s17",
+                    title: "边界条件n·（B1－B2）＝0仅在下列边界上成立（     ）。",
+                    options: [
+                        "在两种非导电媒质的分界面上",
+                        "在任何两种介质的分界面上",
+                        "在理想介质与理想导电媒质的分界面上",
+                        "在真空中的导体表面上"
+                    ],
+                    answer: "B",
+                    knowledge: ["magnetic-boundary"],
+                    analysis: "磁感应强度的法向分量连续是普遍的边界条件，适用于任何两种介质的分界面（无论是否导电）。"
+                },
+                {
+                    id: "s18",
+                    title: "谐振腔是一种适用于UHF及更高频率的谐振元件。其空腔内只存在（   ）。",
+                    options: ["行波", "驻波", "混合波", "入射波"],
+                    answer: "B",
+                    knowledge: ["resonator"],
+                    analysis: "谐振腔通过电磁波的来回反射形成驻波，无能量传输，仅在腔体内振荡。"
+                },
+                {
+                    id: "s19",
+                    title: "在没有外磁场作用时，磁媒质中磁偶极矩的方向是（ ）。",
+                    options: ["同一的", "随机的", "两两平行的", "相互垂直的"],
+                    answer: "B",
+                    knowledge: ["magnetic-magnetization"],
+                    analysis: "无外磁场时，磁媒质内的磁偶极矩无规则排列，方向随机；外磁场作用下会趋向于外磁场方向，即磁化。"
+                },
+                {
+                    id: "s20",
+                    title: "已知复数形式的电场，其瞬时值形式正确的是（      ）。",
+                    options: ["", "", "", ""],
+                    answer: "A",
+                    knowledge: ["plane-wave"],
+                    analysis: "时谐电磁场的复数形式转换为瞬时值需取实部，即E(t)=Re[Ẽe^(jωt)]。"
+                },
+                {
+                    id: "s21",
+                    title: "矢量运算题（题干缺失）",
+                    options: ["", "", "", ""],
+                    answer: "A",
+                    knowledge: ["vector-divergence-curl"],
+                    analysis: "矢量的旋度、散度运算需遵循矢量恒等式，如∇×(∇u)=0、∇·(∇×A)=0。"
+                },
+                {
+                    id: "s22",
+                    title: "如果一个矢量场的旋度处处为零，则这个矢量场是由（       ）源所产生的",
+                    options: ["旋度", "散度", "梯度", "矢量"],
+                    answer: "B",
+                    knowledge: ["vector-source"],
+                    analysis: "旋度为零的矢量场是无旋场（保守场），由散度源（标量源）产生，可表示为标量函数的梯度。"
+                },
+                {
+                    id: "s23",
+                    title: "对于无旋场，设矢量函数为F，标量函数为u，则等式（         ）成立。",
+                    options: ["F=∇u", "F=∇×u", "∇·F=u", "∇×F=u"],
+                    answer: "A",
+                    knowledge: ["vector-gradient"],
+                    analysis: "无旋场满足∇×F=0，根据亥姆霍兹定理，可表示为标量函数的梯度，即F=∇u。"
+                },
+                {
+                    id: "s24",
+                    title: "磁场B中运动的电荷会受到洛仑磁力F的作用，F与B(      )。",
+                    options: ["同向平行", "反向平行", "相互垂直", "无法确定关系"],
+                    answer: "C",
+                    knowledge: ["magnetic-b-h"],
+                    analysis: "洛伦兹力公式为F=q(v×B)，叉乘结果表明F的方向与v和B都垂直。"
+                },
+                {
+                    id: "s25",
+                    title: "电磁波在不同媒质中其传播特性不一样，一般电磁波在（    ）中的衰减很快。",
+                    options: ["理想介质", "一般导体", "良导体", "绝缘材料"],
+                    answer: "C",
+                    knowledge: ["wave-attenuation"],
+                    analysis: "良导体的电导率极大，电磁波在其中传播时会产生强烈的焦耳损耗，振幅呈指数衰减，衰减常数很大。"
+                },
+                {
+                    id: "s26",
+                    title: "设平板电容器的极板分别与电池相连，现将两极板缓慢拉开，则极板上的电荷量会（     ）",
+                    options: ["减少", "增加", "随机变化", "保持不变"],
+                    answer: "A",
+                    knowledge: ["capacitor"],
+                    analysis: "电容器与电池相连时极板电压U不变，电容C=εS/(d)，拉开极板d增大则C减小，由Q=CU可知电荷量Q减少。"
+                },
+                {
+                    id: "s27",
+                    title: "入射波和反射波构成合成波，如果在空间中没有移动，只是在原来的位置振动，此时这种波称为（      ）",
+                    options: ["行波", "驻波", "时谐波", "导波"],
+                    answer: "B",
+                    knowledge: ["wave-reflection"],
+                    analysis: "驻波由入射波和反射波叠加而成，波节和波腹位置固定，无能量传播，仅在原地振动。"
+                },
+                {
+                    id: "s28",
+                    title: "区域V全部用理想媒质填充，当此区域中的电磁场能量减少时，一定是（     ）。",
+                    options: [
+                        "能量流出了区域",
+                        "能量在区域中被损耗",
+                        "电磁场做了功",
+                        "同时选择A和B"
+                    ],
+                    answer: "A",
+                    knowledge: ["poynting-theorem"],
+                    analysis: "理想媒质无损耗，能量守恒由坡印亭定理描述，区域内能量减少意味着能量通过边界流出（坡印亭矢量的通量为负）。"
+                },
+                {
+                    id: "s29",
+                    title: "均匀平面波在（        ）中传播时，电场和磁场的振幅呈指数衰减。",
+                    options: ["理想介质", "绝缘材料", "理想导体", "导电媒质"],
+                    answer: "D",
+                    knowledge: ["wave-conductive"],
+                    analysis: "导电媒质中存在传导电流，电磁波的电场和磁场会因焦耳热损耗而振幅指数衰减，衰减常数α>0。"
+                },
+                {
+                    id: "s30",
+                    title: "如果波导中传播的电磁波 Hz不等于0， Ez 等于0 ，称为（      ）",
+                    options: ["TM 波", "TE波", "TEM波", "E波"],
+                    answer: "B",
+                    knowledge: ["waveguide-mode"],
+                    analysis: "TE波（横电波）的电场纵向分量Ez=0，磁场纵向分量Hz≠0；TM波则相反，TEM波无纵向分量。"
+                },
+                {
+                    id: "s31",
+                    title: "同轴波导的主模是（    ）",
+                    options: ["TM01", "TE11", "TEM模", "TM11"],
+                    answer: "C",
+                    knowledge: ["waveguide-type"],
+                    analysis: "同轴波导可以传播TEM波，且TEM模是其主模（截止频率为0，可传播任意频率的电磁波）。"
+                },
+                {
+                    id: "s32",
+                    title: "光纤是一种介质波导，光波能在芯线和包层的分界面上发生（    ）。",
+                    options: ["全透射", "折射", "全反射", "反射"],
+                    answer: "C",
+                    knowledge: ["optical-fiber"],
+                    analysis: "光纤的芯线折射率大于包层，当光波以大于临界角的角度入射到分界面时，会发生全反射，从而将光约束在芯线中传播。"
+                },
+                {
+                    id: "s33",
+                    title: "（   ）在外（    ）作用下发生磁化。",
+                    options: [
+                        "电介质，磁场",
+                        "电介质，电场",
+                        "磁介质，电场",
+                        "磁介质，磁场"
+                    ],
+                    answer: "D",
+                    knowledge: ["magnetic-magnetization"],
+                    analysis: "磁介质在外部磁场作用下，内部磁偶极矩趋向于外磁场方向，形成宏观磁矩，即磁化现象。"
+                },
+                {
+                    id: "s34",
+                    title: "反映电磁场能量守恒与转换规律的是（     ）",
+                    options: ["坡印亭定理", "焦耳定理", "散度定理", "安培环路定理"],
+                    answer: "A",
+                    knowledge: ["poynting-theorem"],
+                    analysis: "坡印亭定理描述了电磁场能量的传输与损耗关系，是电磁场的能量守恒定律。"
+                },
+                {
+                    id: "s35",
+                    title: "∮_L A·dl = ∬_S (∇×A)·dS ，此公式称为（         ）。",
+                    options: ["斯托克斯定理", "散度定理", "欧姆定理", "坡印廷定理"],
+                    answer: "A",
+                    knowledge: ["vector-divergence-curl"],
+                    analysis: "斯托克斯定理建立了矢量场的旋度在曲面上的面积分与矢量场在曲面边界上的线积分之间的关系。"
+                },
+                {
+                    id: "s36",
+                    title: "均匀平面波在理想介质中传播，电磁波的相速与（       ）有关。",
+                    options: ["媒质参数", "电磁波的频率", "传播方向", "传播距离"],
+                    answer: "A",
+                    knowledge: ["plane-wave"],
+                    analysis: "理想介质中均匀平面波的相速v=1/√(με)，仅与媒质的介电常数ε和磁导率μ有关，与频率无关（无色散）。"
+                },
+                {
+                    id: "s37",
+                    title: "电磁波在（        ）中传播时衰减很快。",
+                    options: ["弱导体", "一般导体", "理想导体", "理想介质"],
+                    answer: "C",
+                    knowledge: ["wave-attenuation"],
+                    analysis: "理想导体的电导率为无穷大，电磁波无法穿透，会在表面产生趋肤效应，衰减极快（趋肤深度为0）。"
+                },
+                {
+                    id: "s38",
+                    title: "关于麦克斯韦方程的描述错误的一项是：（     ）",
+                    options: [
+                        "适合任何介质",
+                        "静态场方程是麦克斯韦方程的特例",
+                        "麦克斯韦方程中的安培环路定律与静态场中的安培环路定律相同",
+                        "只有代入本构方程，麦克斯韦方程才能求解"
+                    ],
+                    answer: "C",
+                    knowledge: ["maxwell-equation"],
+                    analysis: "麦克斯韦的安培环路定律加入了位移电流项，而静态场的安培环路定律仅包含传导电流，二者不同。"
+                },
+                {
+                    id: "s39",
+                    title: "∮_S A·dS = ∭_V (∇·A)dV ，此公式称为（          ）",
+                    options: ["库仑定理", "散度定理", "旋度定理", "斯托克斯定理"],
+                    answer: "B",
+                    knowledge: ["vector-divergence-curl"],
+                    analysis: "散度定理（高斯定理）建立了矢量场的散度在体积内的体积分与矢量场在体积边界面上的面积分之间的关系。"
+                },
+                {
+                    id: "s40",
+                    title: "如果一个矢量场的散度处处为零，则这个矢量场是由（       ）源所产生的",
+                    options: ["涡旋", "散度", "通量", "矢量"],
+                    answer: "A",
+                    knowledge: ["vector-source"],
+                    analysis: "散度为零的矢量场是涡旋场，由涡旋源（旋度源）产生，例如磁场由电流（涡旋源）产生，∇·B=0。"
+                },
+                {
+                    id: "s41",
+                    title: "群速度是指（　 　）",
+                    options: [
+                        "等相位面的行进速度",
+                        "波的行进速度",
+                        "波的振动速度",
+                        "包络波上任一恒定相位点的推进速度"
+                    ],
+                    answer: "D",
+                    knowledge: ["wave-dispersion"],
+                    analysis: "相速是等相位面的传播速度，群速是波包（包络）的传播速度，代表信号能量的传播速度。"
+                }
+            ],
+            // 多选题（答题时暂不纳入，仅单选题+简答题）
+            multiple: [
+                {
+                    id: "m1",
+                    title: "圆柱坐标系的三个坐标变量是（     ）。",
+                    options: ["ρ", "φ", "z", "r"],
+                    answer: "ABC",
+                    knowledge: ["coordinate-system"],
+                    analysis: "圆柱坐标系的三个坐标变量为ρ（径向）、φ（角向）、z（轴向）。"
+                },
+                // 其余多选题省略，如需加入可扩展代码
+            ],
+            // 判断题（答题时暂不纳入，仅单选题+简答题）
+            judge: [
+                {
+                    id: "j1",
+                    title: "实际材料的电磁特性是确定的,不随频率的改变而改变",
+                    answer: "×",
+                    knowledge: ["maxwell-equation"],
+                    analysis: "实际材料的介电常数、磁导率等参数会随频率变化，即频散特性。"
+                },
+                // 其余判断题省略，如需加入可扩展代码
+            ],
+            // 简答题
+            short: [
+                {
+                    id: "sh1",
+                    title: "试写出真空中静电场的基本方程的积分与微分形式，并说明其物理意义。",
+                    answer: "真空中静电场的基本方程的积分与微分形式分别为：∮_S E·dS = q/ε₀（高斯定理），∇·E = ρ/ε₀；∮_L E·dl = 0（环路定理），∇×E = 0。物理意义：E的散度与分布电荷密度成正比，E的旋度等于0，说明静电场是一个有散无旋场，电荷是激发静电场的源。",
+                    knowledge: ["electrostatic-equation"],
+                    analysis: "高斯定理描述静电场的有散性，环路定理描述静电场的无旋性，静电场是保守场。"
+                },
+                {
+                    id: "sh2",
+                    title: "产生电场的源有哪些？什么样的电场叫静电场？什么样的电场叫时变电场？",
+                    answer: "电场可以由电荷产生，也可以由变化的磁场产生；随时间变化的电场称时变电场，空间位置固定，电量不随时间变化的电荷产生的电场称静场。",
+                    knowledge: ["electrostatic-e", "electromagnetic-induction"],
+                    analysis: "静电场由静止电荷产生，是无旋场；时变电场可由变化的磁场产生（法拉第电磁感应定律），是有旋场。"
+                },
+                {
+                    id: "sh3",
+                    title: "在无源空间中，在线性、各向同性且无损耗的均匀媒质中，试写出电场强度矢量E和磁场强度矢量H所满足的波动方程。说明电磁场的波动方程的物理意义。",
+                    answer: "在无源空间中，设媒质是线形、各向同性且无损耗的均匀媒质，则有：∇²E - με∂²E/∂t² = 0，∇²H - με∂²H/∂t² = 0。电磁场波动方程是二阶矢量微分方程，揭示了时变电磁场的运动规律，即电磁场的波动性。",
+                    knowledge: ["plane-wave", "maxwell-equation"],
+                    analysis: "波动方程表明电磁场以波的形式传播，其传播速度由媒质参数决定（v=1/√(με)）。"
+                },
+                {
+                    id: "sh4",
+                    title: "什么是导行波？什么是导波系统？",
+                    answer: "导行电磁波 —— 被限制在某一特定区域内传播的电磁波；导波系统 —— 引导电磁波从一处定向传输到另一处的装置。",
+                    knowledge: ["waveguide-type"],
+                    analysis: "常见的导波系统有矩形波导、同轴波导、光纤等，导行波被约束在导波系统内传播。"
+                },
+                {
+                    id: "sh5",
+                    title: "试写出真空中恒定磁场的基本方程的积分与微分形式，并说明其物理意义。",
+                    answer: "真空中恒定磁场的基本方程的积分与微分形式分别为：∮_L H·dl = I（安培环路定理），∇×H = J；∮_S B·dS = 0（磁通连续性定理），∇·B = 0。说明恒定磁场是一个无散有旋场，电流是激发恒定磁场的源。",
+                    knowledge: ["magnetic-equation"],
+                    analysis: "安培环路定理描述磁场的有旋性，磁通连续性定理描述磁场的无散性，磁场线是闭合曲线。"
+                },
+                {
+                    id: "sh6",
+                    title: "学习雷达的工作原理，说明隐形飞机的隐形原理。",
+                    answer: "隐形飞机隐形原理：（1）隐形飞机的外形上避免使用大而垂直的垂直面，最好采用凹面，这样可以使散射的信号偏离力图接收它的雷达。（2）隐形飞机采用非金属材料或者雷达吸波材料，吸收掉而不是反射掉来自雷达的能量。（3）尽量减少机身的强反射点或者说是'亮点'、发动机的噪声以及机体本身的热辐射等。",
+                    knowledge: ["wave-reflection"],
+                    analysis: "雷达通过接收目标的电磁波反射信号探测目标，隐形飞机通过外形设计和吸波材料减少反射，降低被探测概率。"
+                },
+                {
+                    id: "sh7",
+                    title: "何为电磁波的极化，电磁波的极化可分为哪几类？当电磁波的极化方向与接收天线的极化方向不一致时，会产生什么结果？",
+                    answer: "电磁场强度的方向随时间变化的方式称为电磁波的极化。电磁波的极化分为线极化，圆极化，椭圆极化三类。当电磁波的极化方向与接收天线的极化方向不一致时，在接收过程中会产生极化损失。",
+                    knowledge: ["wave-polarization"],
+                    analysis: "极化是电磁波的重要特性，接收天线的极化需与电磁波极化匹配，否则会导致接收信号衰减（极化失配）。"
+                }
+            ]
+        };
+
+        // ************************** 第二步：全局变量定义 **************************
+        let currentQuestions = []; // 当前答题的5道题（4单+1简）
+        let wrongKnowledge = new Set(); // 错题对应的知识点ID
+        let score = 0; // 当前分数
+        let answered = false; // 是否已提交答案
+
+        // ************************** 第三步：渲染知识点树形结构 **************************
+        function renderKnowledgeTree(node, parentElement) {
+            const treeNode = document.createElement("div");
+            treeNode.className = "tree-node" + (parentElement.id === "knowledge-tree" ? " tree-root expanded" : " collapsed");
+            treeNode.dataset.knowledgeId = node.id || "";
+
+            const titleDiv = document.createElement("div");
+            titleDiv.className = "title";
+            titleDiv.textContent = node.title;
+            treeNode.appendChild(titleDiv);
+
+            if (node.children && node.children.length > 0) {
+                const childrenDiv = document.createElement("div");
+                childrenDiv.className = "children";
+                node.children.forEach(child => renderKnowledgeTree(child, childrenDiv));
+                treeNode.appendChild(childrenDiv);
+
+                // 折叠/展开事件
+                titleDiv.addEventListener("click", () => {
+                    treeNode.classList.toggle("expanded");
+                    treeNode.classList.toggle("collapsed");
+                });
+            }
+
+            parentElement.appendChild(treeNode);
+        }
+
+        // 初始化知识点树
+        renderKnowledgeTree(knowledgeTreeData, document.getElementById("knowledge-tree"));
+
+        // ************************** 第四步：随机生成5道题（4单+1简） **************************
+        function generateRandomQuestions() {
+            // 随机选4道单选题
+            const randomSingle = shuffleArray([...questionBank.single]).slice(0, 4);
+            // 随机选1道简答题
+            const randomShort = shuffleArray([...questionBank.short]).slice(0, 1);
+            // 合并为当前题目
+            currentQuestions = [...randomSingle, ...randomShort];
+            // 渲染题目到页面
+            renderQuestions();
+            // 重置状态
+            answered = false;
+            score = 0;
+            document.getElementById("score").textContent = score;
+            document.getElementById("submit-btn").disabled = false;
+            document.getElementById("redo-error-btn").style.display = "none";
+            document.getElementById("redo-random-btn").style.display = "none";
+            // 清空错题知识点标注
+            clearErrorMark();
+        }
+
+        // 生成错题知识点相关的5道题
+        function generateErrorRelatedQuestions() {
+            if (wrongKnowledge.size === 0) {
+                alert("暂无错题知识点，将随机生成题目！");
+                generateRandomQuestions();
+                return;
+            }
+            // 筛选与错题知识点相关的单选题和简答题
+            const relatedSingle = questionBank.single.filter(q => 
+                q.knowledge.some(k => wrongKnowledge.has(k))
+            );
+            const relatedShort = questionBank.short.filter(q => 
+                q.knowledge.some(k => wrongKnowledge.has(k))
+            );
+            // 随机选4单+1简（若数量不足则补充随机题）
+            const finalSingle = shuffleArray(relatedSingle).slice(0, 4);
+            const finalShort = shuffleArray(relatedShort).slice(0, 1);
+            // 补充不足的题目
+            if (finalSingle.length < 4) {
+                const randomSingle = shuffleArray([...questionBank.single]).slice(0, 4 - finalSingle.length);
+                finalSingle.push(...randomSingle);
+            }
+            if (finalShort.length < 1) {
+                const randomShort = shuffleArray([...questionBank.short]).slice(0, 1);
+                finalShort.push(...randomShort);
+            }
+            // 合并为当前题目
+            currentQuestions = [...finalSingle, ...finalShort];
+            // 渲染题目
+            renderQuestions();
+            // 重置状态
+            answered = false;
+            score = 0;
+            document.getElementById("score").textContent = score;
+            document.getElementById("submit-btn").disabled = false;
+            document.getElementById("redo-error-btn").style.display = "none";
+            document.getElementById("redo-random-btn").style.display = "none";
+            // 清空错题标注
+            clearErrorMark();
+        }
+
+        // 渲染题目到页面
+        function renderQuestions() {
+            const questionBox = document.getElementById("question-box");
+            questionBox.innerHTML = "";
+            currentQuestions.forEach((q, index) => {
+                const questionDiv = document.createElement("div");
+                questionDiv.className = "question";
+                questionDiv.dataset.questionId = q.id;
+                questionDiv.dataset.knowledge = q.knowledge.join(",");
+
+                // 题目标题
+                const title = document.createElement("h3");
+                title.textContent = `${index + 1}、${q.title}`;
+                questionDiv.appendChild(title);
+
+                // 选项（单选题）或文本框（简答题）
+                if (q.options) {
+                    // 单选题
+                    q.options.forEach((opt, optIndex) => {
+                        const option = document.createElement("div");
+                        option.className = "option";
+                        const optLetter = String.fromCharCode(65 + optIndex); // A/B/C/D
+                        option.innerHTML = `<input type="radio" name="q${index}" value="${optLetter}" id="q${index}-${optLetter}">
+                                            <label for="q${index}-${optLetter}">${optLetter}、${opt || "（选项缺失）"}</label>`;
+                        questionDiv.appendChild(option);
+                    });
+                } else {
+                    // 简答题
+                    const textarea = document.createElement("textarea");
+                    textarea.className = "short-answer";
+                    textarea.name = `q${index}`;
+                    textarea.placeholder = "请输入答案...";
+                    questionDiv.appendChild(textarea);
+                }
+
+                // 答案解析区域
+                const analysisDiv = document.createElement("div");
+                analysisDiv.className = "answer-analysis";
+                analysisDiv.id = `analysis-${index}`;
+                const analysisTitle = document.createElement("h4");
+                analysisTitle.textContent = "参考答案与解析：";
+                const analysisContent = document.createElement("div");
+                analysisContent.className = "analysis-content";
+                analysisContent.innerHTML = `<p>答案：${q.answer}</p><p>解析：${q.analysis}</p>`;
+                analysisDiv.appendChild(analysisTitle);
+                analysisDiv.appendChild(analysisContent);
+                questionDiv.appendChild(analysisDiv);
+
+                questionBox.appendChild(questionDiv);
+            });
+        }
+
+        // ************************** 第五步：提交答案与评分 **************************
+        function submitAnswers() {
+            if (answered) return;
+            answered = true;
+            let totalScore = 100;
+            let singleScore = 20; // 每题20分，4单=80分，1简=20分
+            let shortScore = 20;
+            wrongKnowledge.clear();
+
+            currentQuestions.forEach((q, index) => {
+                const analysisDiv = document.getElementById(`analysis-${index}`);
+                analysisDiv.style.display = "block";
+                let isCorrect = false;
+
+                if (q.options) {
+                    // 单选题判分
+                    const selected = document.querySelector(`input[name="q${index}"]:checked`);
+                    if (selected && selected.value === q.answer) {
+                        score += singleScore;
+                        isCorrect = true;
+                    } else {
+                        // 记录错题知识点
+                        q.knowledge.forEach(k => wrongKnowledge.add(k));
+                    }
+                } else {
+                    // 简答题（仅展示答案，暂给满分，可扩展人工判分）
+                    score += shortScore;
+                    isCorrect = true;
+                    // 若需判分，可对比输入内容与标准答案，此处简化处理
+                }
+
+                document.getElementById("score").textContent = score;
+            });
+
+            // 标注错题知识点
+            markErrorKnowledge();
+            // 显示按钮
+            document.getElementById("submit-btn").disabled = true;
+            document.getElementById("redo-error-btn").style.display = "inline-block";
+            document.getElementById("redo-random-btn").style.display = "inline-block";
+        }
+
+        // 标注错题知识点
+        function markErrorKnowledge() {
+            wrongKnowledge.forEach(kid => {
+                const nodes = document.querySelectorAll(`.tree-node[data-knowledge-id="${kid}"]`);
+                nodes.forEach(node => {
+                    node.querySelector(".title").classList.add("error-point");
+                });
+            });
+        }
+
+        // 清空错题标注
+        function clearErrorMark() {
+            const errorNodes = document.querySelectorAll(".error-point");
+            errorNodes.forEach(node => node.classList.remove("error-point"));
+        }
+
+        // 工具函数：数组洗牌
+        function shuffleArray(arr) {
+            const newArr = [...arr];
+            for (let i = newArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+            }
+            return newArr;
+        }
+
+        // ************************** 第六步：绑定事件 **************************
+        document.getElementById("submit-btn").addEventListener("click", submitAnswers);
+        document.getElementById("redo-error-btn").addEventListener("click", generateErrorRelatedQuestions);
+        document.getElementById("redo-random-btn").addEventListener("click", generateRandomQuestions);
+
+        // 初始化页面：生成随机题目
+        generateRandomQuestions();
+    </script>
+</body>
+</html>
